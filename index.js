@@ -63,9 +63,15 @@ const InviteCodeSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+const PushSubscriptionSchema = new mongoose.Schema({
+  subscription: { type: Object, required: true },
+  createdAt: { type: Date, default: Date.now }
+});
+
 const Player = mongoose.model("Player", PlayerSchema);
 const Session = mongoose.model("Session", SessionSchema);
 const InviteCode = mongoose.model("InviteCode", InviteCodeSchema);
+const PushSubscription = mongoose.model("PushSubscription", PushSubscriptionSchema);
 
 // ========== ROUTES ==========
 
@@ -75,6 +81,14 @@ app.get("/", (req, res) => {
 
 app.get("/api/vapid-public-key", (req, res) => {
   res.json({ key: VAPID_PUBLIC });
+});
+
+app.post("/api/subscribe", async (req, res) => {
+  const { subscription } = req.body;
+  if (!subscription) return res.status(400).json({ error: "Subscription required" });
+  const doc = new PushSubscription({ subscription });
+  await doc.save();
+  res.json({ success: true });
 });
 
 app.post("/api/verify-invite", async (req, res) => {
@@ -166,8 +180,35 @@ app.post("/api/sessions/:id/match/:matchIndex", async (req, res) => {
     player.stats.winRate = Math.round((player.stats.wins / player.stats.played) * 100);
     await player.save();
   }
-  
-  res.json({ session });
+
+  // Check if all matches are completed
+  const allDone = session.matches.every(m => m.completed);
+  let winner = null;
+
+  if (allDone) {
+    session.status = "completed";
+    await session.save();
+
+    // Find the player with the most total points among session participants
+    const sessionPlayers = await Player.find({ _id: { $in: session.players } });
+    winner = sessionPlayers.reduce((best, p) =>
+      p.stats.totalPoints > (best ? best.stats.totalPoints : -1) ? p : best, null
+    );
+
+    // Send push notification to all subscribers
+    const payload = JSON.stringify({
+      title: "Session Complete!",
+      body: `Winner: ${winner.name} with ${winner.stats.totalPoints} points!`,
+      winner: { id: winner._id, name: winner.name, avatar: winner.avatar, stats: winner.stats }
+    });
+
+    const subscribers = await PushSubscription.find();
+    await Promise.allSettled(
+      subscribers.map(s => webpush.sendNotification(s.subscription, payload))
+    );
+  }
+
+  res.json({ session, winner, sessionComplete: allDone });
 });
 
 app.get("/api/sessions/active", async (req, res) => {
