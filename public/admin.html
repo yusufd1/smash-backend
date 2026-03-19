@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smash Admin</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0f; color: #e0e0e0; min-height: 100vh; }
+
+  /* Login */
+  #login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .login-card { background: #13131a; border: 1px solid #2a2a3a; border-radius: 16px; padding: 40px; width: 360px; text-align: center; }
+  .login-card .logo { font-size: 2.5rem; margin-bottom: 8px; }
+  .login-card h1 { font-size: 1.4rem; font-weight: 700; color: #fff; margin-bottom: 4px; }
+  .login-card p { color: #666; font-size: 0.85rem; margin-bottom: 28px; }
+  .login-card input { width: 100%; background: #1e1e2e; border: 1px solid #2a2a3a; border-radius: 10px; padding: 12px 16px; color: #e0e0e0; font-size: 1rem; outline: none; margin-bottom: 12px; transition: border-color 0.2s; }
+  .login-card input:focus { border-color: #00c9a7; }
+  .login-card .error { color: #ff7675; font-size: 0.85rem; margin-bottom: 12px; min-height: 20px; }
+
+  /* Buttons */
+  .btn { border: none; border-radius: 10px; padding: 11px 20px; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+  .btn-primary { background: #00c9a7; color: #000; width: 100%; }
+  .btn-primary:hover { background: #00b396; }
+  .btn-danger { background: #ff4757; color: #fff; padding: 7px 14px; font-size: 0.8rem; border-radius: 8px; }
+  .btn-danger:hover { background: #e0003b; }
+  .btn-warning { background: #f39c12; color: #000; padding: 7px 14px; font-size: 0.8rem; border-radius: 8px; }
+  .btn-warning:hover { background: #d68910; }
+  .btn-sm { background: #2a2a3a; color: #e0e0e0; padding: 7px 14px; font-size: 0.8rem; border-radius: 8px; }
+  .btn-sm:hover { background: #3a3a4a; }
+  .btn-green { background: #00c9a7; color: #000; }
+  .btn-green:hover { background: #00b396; }
+
+  /* App Layout */
+  #app { display: none; }
+  .header { background: #13131a; border-bottom: 1px solid #2a2a3a; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .header-logo { font-size: 1.5rem; }
+  .header h1 { font-size: 1.1rem; font-weight: 700; color: #fff; }
+  .header-logout { background: none; border: 1px solid #2a2a3a; color: #888; border-radius: 8px; padding: 6px 14px; font-size: 0.8rem; cursor: pointer; }
+  .header-logout:hover { border-color: #ff4757; color: #ff4757; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; background: #0a0a0f; padding: 16px 24px 0; border-bottom: 1px solid #2a2a3a; overflow-x: auto; }
+  .tab { padding: 10px 20px; border-radius: 10px 10px 0 0; font-size: 0.9rem; font-weight: 500; cursor: pointer; color: #666; background: none; border: none; transition: all 0.15s; white-space: nowrap; }
+  .tab.active { background: #13131a; color: #00c9a7; border: 1px solid #2a2a3a; border-bottom: 1px solid #13131a; margin-bottom: -1px; }
+  .tab:hover:not(.active) { color: #aaa; }
+
+  /* Content */
+  .content { padding: 24px; max-width: 1100px; margin: 0 auto; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* Stats Grid */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; margin-bottom: 28px; }
+  .stat-card { background: #13131a; border: 1px solid #2a2a3a; border-radius: 14px; padding: 20px; text-align: center; }
+  .stat-card .value { font-size: 2rem; font-weight: 700; color: #00c9a7; }
+  .stat-card .label { font-size: 0.8rem; color: #666; margin-top: 4px; }
+
+  /* Tables */
+  .card { background: #13131a; border: 1px solid #2a2a3a; border-radius: 14px; overflow: hidden; margin-bottom: 20px; }
+  .card-header { padding: 16px 20px; border-bottom: 1px solid #2a2a3a; display: flex; align-items: center; justify-content: space-between; flex-wrap: gap; gap: 12px; }
+  .card-header h2 { font-size: 1rem; font-weight: 600; color: #fff; }
+  .card-header .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 10px 20px; font-size: 0.75rem; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #2a2a3a; }
+  td { padding: 12px 20px; font-size: 0.875rem; border-bottom: 1px solid #1a1a2a; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #1a1a2a; }
+
+  /* Badges */
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 100px; font-size: 0.75rem; font-weight: 600; }
+  .badge-green { background: #003d33; color: #00c9a7; }
+  .badge-red { background: #3d0010; color: #ff4757; }
+  .badge-blue { background: #001a3d; color: #74b9ff; }
+  .badge-orange { background: #3d2000; color: #FFB300; }
+
+  /* Avatar */
+  .avatar { width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 700; color: #000; flex-shrink: 0; }
+
+  /* Code display */
+  .code { font-family: 'Courier New', monospace; font-size: 0.875rem; background: #1e1e2e; padding: 4px 8px; border-radius: 6px; letter-spacing: 0.05em; }
+
+  /* Generate modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 200; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: #13131a; border: 1px solid #2a2a3a; border-radius: 16px; padding: 28px; width: 420px; max-width: 95vw; }
+  .modal h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 20px; }
+  .modal label { font-size: 0.85rem; color: #888; display: block; margin-bottom: 6px; }
+  .modal input, .modal select { width: 100%; background: #1e1e2e; border: 1px solid #2a2a3a; border-radius: 10px; padding: 10px 14px; color: #e0e0e0; font-size: 0.9rem; outline: none; margin-bottom: 16px; }
+  .modal input:focus, .modal select:focus { border-color: #00c9a7; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+  .generated-codes { background: #0a0a0f; border-radius: 10px; padding: 14px; max-height: 200px; overflow-y: auto; margin-bottom: 16px; }
+  .generated-codes .code { display: block; margin-bottom: 6px; cursor: pointer; }
+  .generated-codes .code:hover { color: #00c9a7; }
+  .copy-hint { font-size: 0.75rem; color: #555; margin-bottom: 8px; }
+
+  /* Toast */
+  #toast { position: fixed; bottom: 24px; right: 24px; background: #00c9a7; color: #000; padding: 12px 20px; border-radius: 10px; font-weight: 600; font-size: 0.875rem; display: none; z-index: 300; animation: slideUp 0.2s ease; }
+  @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  .empty { text-align: center; padding: 40px; color: #555; font-size: 0.875rem; }
+  .loading { text-align: center; padding: 40px; color: #555; }
+  .flex-gap { display: flex; gap: 8px; align-items: center; }
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="logo">🎾</div>
+    <h1>Smash Admin</h1>
+    <p>Enter your admin password to continue</p>
+    <input type="password" id="password-input" placeholder="Admin password" />
+    <div class="error" id="login-error"></div>
+    <button class="btn btn-primary" onclick="login()">Sign In</button>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div class="header">
+    <div class="header-left">
+      <span class="header-logo">🎾</span>
+      <h1>Smash Admin</h1>
+    </div>
+    <button class="header-logout" onclick="logout()">Sign Out</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('overview')">Overview</button>
+    <button class="tab" onclick="showTab('codes')">Invite Codes</button>
+    <button class="tab" onclick="showTab('players')">Players</button>
+    <button class="tab" onclick="showTab('sessions')">Sessions</button>
+  </div>
+
+  <div class="content">
+
+    <!-- Overview -->
+    <div class="panel active" id="panel-overview">
+      <div class="stats-grid" id="stats-grid">
+        <div class="loading">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Invite Codes -->
+    <div class="panel" id="panel-codes">
+      <div class="card">
+        <div class="card-header">
+          <h2>Invite Codes</h2>
+          <div class="actions">
+            <select id="codes-filter" onchange="renderCodes()" style="background:#1e1e2e;border:1px solid #2a2a3a;color:#e0e0e0;border-radius:8px;padding:6px 10px;font-size:0.8rem;outline:none;">
+              <option value="all">All codes</option>
+              <option value="unused">Available only</option>
+              <option value="used">Used only</option>
+            </select>
+            <button class="btn btn-sm btn-green" onclick="openGenerateModal()">+ Generate Codes</button>
+          </div>
+        </div>
+        <div id="codes-table-container"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- Players -->
+    <div class="panel" id="panel-players">
+      <div class="card">
+        <div class="card-header">
+          <h2>Players</h2>
+          <span id="player-count" style="color:#666;font-size:0.85rem;"></span>
+        </div>
+        <div id="players-table-container"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- Sessions -->
+    <div class="panel" id="panel-sessions">
+      <div class="card">
+        <div class="card-header">
+          <h2>Sessions</h2>
+          <span id="session-count" style="color:#666;font-size:0.85rem;"></span>
+        </div>
+        <div id="sessions-table-container"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Generate Codes Modal -->
+<div class="modal-overlay" id="generate-modal">
+  <div class="modal">
+    <h3>Generate Invite Codes</h3>
+    <div id="generate-form">
+      <label>Number of codes</label>
+      <input type="number" id="code-count" value="5" min="1" max="50" />
+      <div class="modal-actions">
+        <button class="btn btn-sm" onclick="closeGenerateModal()">Cancel</button>
+        <button class="btn btn-green btn-sm" onclick="generateCodes()">Generate</button>
+      </div>
+    </div>
+    <div id="generate-result" style="display:none;">
+      <p class="copy-hint">Click a code to copy it</p>
+      <div class="generated-codes" id="new-codes-list"></div>
+      <div class="modal-actions">
+        <button class="btn btn-sm" onclick="copyAllCodes()">Copy All</button>
+        <button class="btn btn-green btn-sm" onclick="closeGenerateModal()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = window.location.origin;
+let adminKey = '';
+let allCodes = [];
+let allPlayers = [];
+let allSessions = [];
+let activeTab = 'overview';
+let newGeneratedCodes = [];
+
+// ---- Auth ----
+document.getElementById('password-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') login();
+});
+
+async function login() {
+  const pw = document.getElementById('password-input').value.trim();
+  if (!pw) return;
+  const res = await fetch(`${API}/api/admin/stats`, { headers: { 'x-admin-key': pw } });
+  if (res.status === 401) {
+    document.getElementById('login-error').textContent = 'Incorrect password';
+    return;
+  }
+  adminKey = pw;
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  loadAll();
+}
+
+function logout() {
+  adminKey = '';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('password-input').value = '';
+}
+
+// ---- API helpers ----
+async function api(path, opts = {}) {
+  const res = await fetch(`${API}${path}`, {
+    ...opts,
+    headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json', ...(opts.headers || {}) }
+  });
+  return res.json();
+}
+
+// ---- Load all data ----
+async function loadAll() {
+  await Promise.all([loadStats(), loadCodes(), loadPlayers(), loadSessions()]);
+}
+
+async function loadStats() {
+  const data = await api('/api/admin/stats');
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-card"><div class="value">${data.totalPlayers}</div><div class="label">Total Players</div></div>
+    <div class="stat-card"><div class="value">${data.activeSessions}</div><div class="label">Active Sessions</div></div>
+    <div class="stat-card"><div class="value">${data.completedSessions}</div><div class="label">Completed Sessions</div></div>
+    <div class="stat-card"><div class="value">${data.availableCodes}</div><div class="label">Available Codes</div></div>
+    <div class="stat-card"><div class="value">${data.usedCodes}</div><div class="label">Used Codes</div></div>
+    <div class="stat-card"><div class="value">${data.totalCodes}</div><div class="label">Total Codes</div></div>
+  `;
+}
+
+async function loadCodes() {
+  allCodes = await api('/api/admin/codes');
+  renderCodes();
+}
+
+async function loadPlayers() {
+  allPlayers = await api('/api/admin/players');
+  document.getElementById('player-count').textContent = `${allPlayers.length} players`;
+  renderPlayers();
+}
+
+async function loadSessions() {
+  allSessions = await api('/api/admin/sessions');
+  document.getElementById('session-count').textContent = `${allSessions.length} sessions`;
+  renderSessions();
+}
+
+// ---- Tabs ----
+function showTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach((el, i) => {
+    el.classList.toggle('active', ['overview','codes','players','sessions'][i] === tab);
+  });
+  document.querySelectorAll('.panel').forEach(el => el.classList.remove('active'));
+  document.getElementById(`panel-${tab}`).classList.add('active');
+}
+
+// ---- Render codes ----
+function renderCodes() {
+  const filter = document.getElementById('codes-filter').value;
+  let codes = allCodes;
+  if (filter === 'unused') codes = codes.filter(c => !c.used);
+  if (filter === 'used') codes = codes.filter(c => c.used);
+
+  if (!codes.length) {
+    document.getElementById('codes-table-container').innerHTML = '<div class="empty">No codes found</div>';
+    return;
+  }
+
+  document.getElementById('codes-table-container').innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Code</th><th>Status</th><th>Used By</th><th>Created</th><th></th>
+      </tr></thead>
+      <tbody>
+        ${codes.map(c => `
+          <tr>
+            <td><span class="code" style="cursor:pointer" onclick="copyText('${c.code}')" title="Click to copy">${c.code}</span></td>
+            <td><span class="badge ${c.used ? 'badge-red' : 'badge-green'}">${c.used ? 'Used' : 'Available'}</span></td>
+            <td style="color:#666;font-size:0.8rem;">${c.used ? (c.usedBy || '—') : '—'}</td>
+            <td style="color:#666;font-size:0.8rem;">${formatDate(c.createdAt)}</td>
+            <td>
+              ${!c.used ? `<button class="btn btn-danger" onclick="deleteCode('${c._id}')">Revoke</button>` : ''}
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ---- Render players ----
+function renderPlayers() {
+  if (!allPlayers.length) {
+    document.getElementById('players-table-container').innerHTML = '<div class="empty">No players yet</div>';
+    return;
+  }
+
+  document.getElementById('players-table-container').innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Player</th><th>Points</th><th>W / L</th><th>Win Rate</th><th>Played</th><th>Joined</th><th></th>
+      </tr></thead>
+      <tbody>
+        ${allPlayers.map(p => `
+          <tr>
+            <td>
+              <div class="flex-gap">
+                <div class="avatar" style="background:${p.avatar?.color || '#00c9a7'}">${p.avatar?.initial || p.name[0]}</div>
+                <span>${p.name}</span>
+              </div>
+            </td>
+            <td><strong>${p.stats.totalPoints}</strong></td>
+            <td>${p.stats.wins} / ${p.stats.losses}</td>
+            <td>${p.stats.winRate}%</td>
+            <td>${p.stats.played}</td>
+            <td style="color:#666;font-size:0.8rem;">${formatDate(p.createdAt)}</td>
+            <td>
+              <div class="flex-gap">
+                <button class="btn btn-warning" onclick="resetStats('${p._id}', '${p.name}')">Reset Stats</button>
+                <button class="btn btn-danger" onclick="deletePlayer('${p._id}', '${p.name}')">Delete</button>
+              </div>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ---- Render sessions ----
+function renderSessions() {
+  if (!allSessions.length) {
+    document.getElementById('sessions-table-container').innerHTML = '<div class="empty">No sessions yet</div>';
+    return;
+  }
+
+  document.getElementById('sessions-table-container').innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Session</th><th>Format</th><th>Courts</th><th>Players</th><th>Matches</th><th>Status</th><th>Created</th><th></th>
+      </tr></thead>
+      <tbody>
+        ${allSessions.map(s => {
+          const done = s.matches.filter(m => m.completed).length;
+          return `
+            <tr>
+              <td><strong>${s.sessionName}</strong></td>
+              <td>${s.format}</td>
+              <td>${s.courts}</td>
+              <td>${s.players.length}</td>
+              <td style="color:#666;font-size:0.8rem;">${done}/${s.matches.length}</td>
+              <td><span class="badge ${s.status === 'active' ? 'badge-blue' : 'badge-orange'}">${s.status}</span></td>
+              <td style="color:#666;font-size:0.8rem;">${formatDate(s.createdAt)}</td>
+              <td><button class="btn btn-danger" onclick="deleteSession('${s._id}', '${s.sessionName}')">Delete</button></td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ---- Actions ----
+async function deleteCode(id) {
+  if (!confirm('Revoke this invite code?')) return;
+  await api(`/api/admin/codes/${id}`, { method: 'DELETE' });
+  toast('Code revoked');
+  await loadCodes();
+  await loadStats();
+}
+
+async function deletePlayer(id, name) {
+  if (!confirm(`Delete player "${name}"? This cannot be undone.`)) return;
+  await api(`/api/admin/players/${id}`, { method: 'DELETE' });
+  toast(`${name} deleted`);
+  await loadPlayers();
+  await loadStats();
+}
+
+async function resetStats(id, name) {
+  if (!confirm(`Reset all stats for "${name}"?`)) return;
+  await api(`/api/admin/players/${id}/reset-stats`, { method: 'POST' });
+  toast(`Stats reset for ${name}`);
+  await loadPlayers();
+}
+
+async function deleteSession(id, name) {
+  if (!confirm(`Delete session "${name}"? This cannot be undone.`)) return;
+  await api(`/api/admin/sessions/${id}`, { method: 'DELETE' });
+  toast('Session deleted');
+  await loadSessions();
+  await loadStats();
+}
+
+// ---- Generate codes ----
+function openGenerateModal() {
+  document.getElementById('generate-form').style.display = 'block';
+  document.getElementById('generate-result').style.display = 'none';
+  document.getElementById('generate-modal').classList.add('open');
+}
+
+function closeGenerateModal() {
+  document.getElementById('generate-modal').classList.remove('open');
+  if (newGeneratedCodes.length) { loadCodes(); loadStats(); newGeneratedCodes = []; }
+}
+
+async function generateCodes() {
+  const count = parseInt(document.getElementById('code-count').value) || 5;
+  const data = await api('/api/admin/generate-codes', { method: 'POST', body: JSON.stringify({ count }) });
+  newGeneratedCodes = data.codes || [];
+  document.getElementById('generate-form').style.display = 'none';
+  document.getElementById('generate-result').style.display = 'block';
+  document.getElementById('new-codes-list').innerHTML = newGeneratedCodes.map(c =>
+    `<span class="code" onclick="copyText('${c}')" title="Click to copy">${c}</span>`
+  ).join('');
+}
+
+function copyAllCodes() {
+  copyText(newGeneratedCodes.join('\n'));
+}
+
+// ---- Utilities ----
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => toast('Copied!'));
+}
+
+function formatDate(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+let toastTimeout;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.display = 'block';
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => { el.style.display = 'none'; }, 2500);
+}
+
+// Close modal on overlay click
+document.getElementById('generate-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeGenerateModal();
+});
+</script>
+</body>
+</html>

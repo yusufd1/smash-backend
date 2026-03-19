@@ -7,6 +7,16 @@ require("dotenv").config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.static("public"));
+
+// Admin auth middleware
+const adminAuth = (req, res, next) => {
+  const key = req.headers["x-admin-key"];
+  if (!key || key !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  next();
+};
 
 // MongoDB connection
 const MONGO_URI = process.env.MONGO_URI || "YOUR_MONGODB_CONNECTION_STRING";
@@ -63,9 +73,15 @@ const InviteCodeSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+const PushSubscriptionSchema = new mongoose.Schema({
+  subscription: { type: Object, required: true },
+  createdAt: { type: Date, default: Date.now }
+});
+
 const Player = mongoose.model("Player", PlayerSchema);
 const Session = mongoose.model("Session", SessionSchema);
 const InviteCode = mongoose.model("InviteCode", InviteCodeSchema);
+const PushSubscription = mongoose.model("PushSubscription", PushSubscriptionSchema);
 
 // ========== ROUTES ==========
 
@@ -75,6 +91,14 @@ app.get("/", (req, res) => {
 
 app.get("/api/vapid-public-key", (req, res) => {
   res.json({ key: VAPID_PUBLIC });
+});
+
+app.post("/api/subscribe", async (req, res) => {
+  const { subscription } = req.body;
+  if (!subscription) return res.status(400).json({ error: "Subscription required" });
+  const doc = new PushSubscription({ subscription });
+  await doc.save();
+  res.json({ success: true });
 });
 
 app.post("/api/verify-invite", async (req, res) => {
@@ -166,8 +190,35 @@ app.post("/api/sessions/:id/match/:matchIndex", async (req, res) => {
     player.stats.winRate = Math.round((player.stats.wins / player.stats.played) * 100);
     await player.save();
   }
-  
-  res.json({ session });
+
+  // Check if all matches are completed
+  const allDone = session.matches.every(m => m.completed);
+  let winner = null;
+
+  if (allDone) {
+    session.status = "completed";
+    await session.save();
+
+    // Find the player with the most total points among session participants
+    const sessionPlayers = await Player.find({ _id: { $in: session.players } });
+    winner = sessionPlayers.reduce((best, p) =>
+      p.stats.totalPoints > (best ? best.stats.totalPoints : -1) ? p : best, null
+    );
+
+    // Send push notification to all subscribers
+    const payload = JSON.stringify({
+      title: "Session Complete!",
+      body: `Winner: ${winner.name} with ${winner.stats.totalPoints} points!`,
+      winner: { id: winner._id, name: winner.name, avatar: winner.avatar, stats: winner.stats }
+    });
+
+    const subscribers = await PushSubscription.find();
+    await Promise.allSettled(
+      subscribers.map(s => webpush.sendNotification(s.subscription, payload))
+    );
+  }
+
+  res.json({ session, winner, sessionComplete: allDone });
 });
 
 app.get("/api/sessions/active", async (req, res) => {
@@ -211,23 +262,68 @@ function generateAmericanoPairings(playerIds, rounds, courts) {
   return matches;
 }
 
-app.post("/api/admin/generate-codes", async (req, res) => {
+// ========== ADMIN ROUTES (protected) ==========
+
+app.get("/api/admin/stats", adminAuth, async (req, res) => {
+  const [totalPlayers, activeSessions, completedSessions, totalCodes, usedCodes] = await Promise.all([
+    Player.countDocuments(),
+    Session.countDocuments({ status: "active" }),
+    Session.countDocuments({ status: "completed" }),
+    InviteCode.countDocuments(),
+    InviteCode.countDocuments({ used: true }),
+  ]);
+  res.json({ totalPlayers, activeSessions, completedSessions, totalCodes, usedCodes, availableCodes: totalCodes - usedCodes });
+});
+
+app.get("/api/admin/codes", adminAuth, async (req, res) => {
+  const codes = await InviteCode.find().sort({ createdAt: -1 });
+  res.json(codes);
+});
+
+app.post("/api/admin/generate-codes", adminAuth, async (req, res) => {
   const { count } = req.body;
   const codes = [];
-  
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < (count || 1); i++) {
     const code = `SMASH-${Math.random().toString(36).substr(2, 4).toUpperCase()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
     const inviteCode = new InviteCode({ code });
     await inviteCode.save();
     codes.push(code);
   }
-  
   res.json({ codes });
 });
 
-app.get("/api/admin/codes", async (req, res) => {
-  const codes = await InviteCode.find().sort({ createdAt: -1 });
-  res.json(codes);
+app.delete("/api/admin/codes/:id", adminAuth, async (req, res) => {
+  await InviteCode.findByIdAndDelete(req.params.id);
+  res.json({ success: true });
+});
+
+app.get("/api/admin/players", adminAuth, async (req, res) => {
+  const players = await Player.find().sort({ createdAt: -1 });
+  res.json(players);
+});
+
+app.delete("/api/admin/players/:id", adminAuth, async (req, res) => {
+  await Player.findByIdAndDelete(req.params.id);
+  res.json({ success: true });
+});
+
+app.post("/api/admin/players/:id/reset-stats", adminAuth, async (req, res) => {
+  await Player.findByIdAndUpdate(req.params.id, {
+    "stats.played": 0, "stats.wins": 0, "stats.losses": 0,
+    "stats.winRate": 0, "stats.totalPoints": 0, "stats.currentStreak": 0, "stats.bestStreak": 0,
+    badges: []
+  });
+  res.json({ success: true });
+});
+
+app.get("/api/admin/sessions", adminAuth, async (req, res) => {
+  const sessions = await Session.find().sort({ createdAt: -1 });
+  res.json(sessions);
+});
+
+app.delete("/api/admin/sessions/:id", adminAuth, async (req, res) => {
+  await Session.findByIdAndDelete(req.params.id);
+  res.json({ success: true });
 });
 
 const PORT = process.env.PORT || 3001;
