@@ -37,6 +37,7 @@ const PlayerSchema = new mongoose.Schema({
 });
 
 const SessionSchema = new mongoose.Schema({
+  sessionName: { type: String, default: "Americano Session" },
   format: { type: String, default: "Americano" },
   courts: Number,
   pointsPerGame: Number,
@@ -117,11 +118,12 @@ app.get("/api/players", async (req, res) => {
 });
 
 app.post("/api/sessions", async (req, res) => {
-  const { format, courts, pointsPerGame, rounds, playerIds } = req.body;
+  const { sessionName, format, courts, pointsPerGame, rounds, playerIds } = req.body;
   
   const matches = generateAmericanoPairings(playerIds, rounds, courts);
   
   const session = new Session({
+    sessionName: sessionName || "Americano Session",
     format,
     courts,
     pointsPerGame,
