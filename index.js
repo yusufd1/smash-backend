@@ -7,6 +7,16 @@ require("dotenv").config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.static("public"));
+
+// Admin auth middleware
+const adminAuth = (req, res, next) => {
+  const key = req.headers["x-admin-key"];
+  if (!key || key !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  next();
+};
 
 // MongoDB connection
 const MONGO_URI = process.env.MONGO_URI || "YOUR_MONGODB_CONNECTION_STRING";
@@ -252,23 +262,68 @@ function generateAmericanoPairings(playerIds, rounds, courts) {
   return matches;
 }
 
-app.post("/api/admin/generate-codes", async (req, res) => {
+// ========== ADMIN ROUTES (protected) ==========
+
+app.get("/api/admin/stats", adminAuth, async (req, res) => {
+  const [totalPlayers, activeSessions, completedSessions, totalCodes, usedCodes] = await Promise.all([
+    Player.countDocuments(),
+    Session.countDocuments({ status: "active" }),
+    Session.countDocuments({ status: "completed" }),
+    InviteCode.countDocuments(),
+    InviteCode.countDocuments({ used: true }),
+  ]);
+  res.json({ totalPlayers, activeSessions, completedSessions, totalCodes, usedCodes, availableCodes: totalCodes - usedCodes });
+});
+
+app.get("/api/admin/codes", adminAuth, async (req, res) => {
+  const codes = await InviteCode.find().sort({ createdAt: -1 });
+  res.json(codes);
+});
+
+app.post("/api/admin/generate-codes", adminAuth, async (req, res) => {
   const { count } = req.body;
   const codes = [];
-  
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < (count || 1); i++) {
     const code = `SMASH-${Math.random().toString(36).substr(2, 4).toUpperCase()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
     const inviteCode = new InviteCode({ code });
     await inviteCode.save();
     codes.push(code);
   }
-  
   res.json({ codes });
 });
 
-app.get("/api/admin/codes", async (req, res) => {
-  const codes = await InviteCode.find().sort({ createdAt: -1 });
-  res.json(codes);
+app.delete("/api/admin/codes/:id", adminAuth, async (req, res) => {
+  await InviteCode.findByIdAndDelete(req.params.id);
+  res.json({ success: true });
+});
+
+app.get("/api/admin/players", adminAuth, async (req, res) => {
+  const players = await Player.find().sort({ createdAt: -1 });
+  res.json(players);
+});
+
+app.delete("/api/admin/players/:id", adminAuth, async (req, res) => {
+  await Player.findByIdAndDelete(req.params.id);
+  res.json({ success: true });
+});
+
+app.post("/api/admin/players/:id/reset-stats", adminAuth, async (req, res) => {
+  await Player.findByIdAndUpdate(req.params.id, {
+    "stats.played": 0, "stats.wins": 0, "stats.losses": 0,
+    "stats.winRate": 0, "stats.totalPoints": 0, "stats.currentStreak": 0, "stats.bestStreak": 0,
+    badges: []
+  });
+  res.json({ success: true });
+});
+
+app.get("/api/admin/sessions", adminAuth, async (req, res) => {
+  const sessions = await Session.find().sort({ createdAt: -1 });
+  res.json(sessions);
+});
+
+app.delete("/api/admin/sessions/:id", adminAuth, async (req, res) => {
+  await Session.findByIdAndDelete(req.params.id);
+  res.json({ success: true });
 });
 
 const PORT = process.env.PORT || 3001;
