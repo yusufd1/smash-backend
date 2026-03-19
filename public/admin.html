@@ -102,6 +102,8 @@
   .empty { text-align: center; padding: 40px; color: #555; font-size: 0.875rem; }
   .loading { text-align: center; padding: 40px; color: #555; }
   .flex-gap { display: flex; gap: 8px; align-items: center; }
+  .btn-broadcast { background: #6c5ce7; color: #fff; padding: 7px 14px; font-size: 0.8rem; border-radius: 8px; }
+  .btn-broadcast:hover { background: #5a4bd1; }
 </style>
 </head>
 <body>
@@ -125,7 +127,10 @@
       <span class="header-logo">🎾</span>
       <h1>Smash Admin</h1>
     </div>
-    <button class="header-logout" onclick="logout()">Sign Out</button>
+    <div class="flex-gap">
+      <button class="btn btn-broadcast btn-sm" onclick="openBroadcastModal()">📣 Broadcast</button>
+      <button class="header-logout" onclick="logout()">Sign Out</button>
+    </div>
   </div>
 
   <div class="tabs">
@@ -184,6 +189,34 @@
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- Rename Player Modal -->
+<div class="modal-overlay" id="rename-modal">
+  <div class="modal">
+    <h3>Rename Player</h3>
+    <label>New name</label>
+    <input type="text" id="rename-input" placeholder="Player name" />
+    <div class="modal-actions">
+      <button class="btn btn-sm" onclick="closeRenameModal()">Cancel</button>
+      <button class="btn btn-green btn-sm" onclick="submitRename()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Broadcast Modal -->
+<div class="modal-overlay" id="broadcast-modal">
+  <div class="modal">
+    <h3>📣 Broadcast Notification</h3>
+    <label>Title</label>
+    <input type="text" id="broadcast-title" placeholder="e.g. Court Update" />
+    <label>Message</label>
+    <input type="text" id="broadcast-body" placeholder="e.g. Session starting in 5 minutes!" />
+    <div class="modal-actions">
+      <button class="btn btn-sm" onclick="closeBroadcastModal()">Cancel</button>
+      <button class="btn btn-broadcast btn-sm" onclick="submitBroadcast()">Send</button>
+    </div>
   </div>
 </div>
 
@@ -322,7 +355,7 @@ function renderCodes() {
           <tr>
             <td><span class="code" style="cursor:pointer" onclick="copyText('${c.code}')" title="Click to copy">${c.code}</span></td>
             <td><span class="badge ${c.used ? 'badge-red' : 'badge-green'}">${c.used ? 'Used' : 'Available'}</span></td>
-            <td style="color:#666;font-size:0.8rem;">${c.used ? (c.usedBy || '—') : '—'}</td>
+            <td style="color:#aaa;font-size:0.875rem;">${c.used ? getPlayerName(c.usedBy) : '—'}</td>
             <td style="color:#666;font-size:0.8rem;">${formatDate(c.createdAt)}</td>
             <td>
               ${!c.used ? `<button class="btn btn-danger" onclick="deleteCode('${c._id}')">Revoke</button>` : ''}
@@ -362,6 +395,7 @@ function renderPlayers() {
             <td style="color:#666;font-size:0.8rem;">${formatDate(p.createdAt)}</td>
             <td>
               <div class="flex-gap">
+                <button class="btn btn-sm" onclick="openRenameModal('${p._id}', '${p.name}')">Rename</button>
                 <button class="btn btn-warning" onclick="resetStats('${p._id}', '${p.name}')">Reset Stats</button>
                 <button class="btn btn-danger" onclick="deletePlayer('${p._id}', '${p.name}')">Delete</button>
               </div>
@@ -397,7 +431,12 @@ function renderSessions() {
               <td style="color:#666;font-size:0.8rem;">${done}/${s.matches.length}</td>
               <td><span class="badge ${s.status === 'active' ? 'badge-blue' : 'badge-orange'}">${s.status}</span></td>
               <td style="color:#666;font-size:0.8rem;">${formatDate(s.createdAt)}</td>
-              <td><button class="btn btn-danger" onclick="deleteSession('${s._id}', '${s.sessionName}')">Delete</button></td>
+              <td>
+                <div class="flex-gap">
+                  ${s.status === 'active' ? `<button class="btn btn-warning" onclick="completeSession('${s._id}', '${s.sessionName}')">Complete</button>` : ''}
+                  <button class="btn btn-danger" onclick="deleteSession('${s._id}', '${s.sessionName}')">Delete</button>
+                </div>
+              </td>
             </tr>
           `;
         }).join('')}
@@ -465,6 +504,63 @@ function copyAllCodes() {
   copyText(newGeneratedCodes.join('\n'));
 }
 
+// ---- Helpers ----
+function getPlayerName(playerId) {
+  if (!playerId) return '—';
+  const p = allPlayers.find(p => p._id === playerId || p._id === String(playerId));
+  return p ? p.name : '—';
+}
+
+// ---- Rename player ----
+let renameTargetId = null;
+function openRenameModal(id, currentName) {
+  renameTargetId = id;
+  document.getElementById('rename-input').value = currentName;
+  document.getElementById('rename-modal').classList.add('open');
+  setTimeout(() => document.getElementById('rename-input').select(), 50);
+}
+function closeRenameModal() {
+  document.getElementById('rename-modal').classList.remove('open');
+  renameTargetId = null;
+}
+async function submitRename() {
+  const name = document.getElementById('rename-input').value.trim();
+  if (!name) return;
+  await api(`/api/admin/players/${renameTargetId}/rename`, { method: 'PATCH', body: JSON.stringify({ name }) });
+  toast(`Player renamed to ${name}`);
+  closeRenameModal();
+  await loadPlayers();
+  await loadCodes();
+}
+
+// ---- Complete session ----
+async function completeSession(id, name) {
+  if (!confirm(`Force-complete session "${name}"?`)) return;
+  await api(`/api/admin/sessions/${id}/complete`, { method: 'PATCH' });
+  toast('Session marked as completed');
+  await loadSessions();
+  await loadStats();
+}
+
+// ---- Broadcast ----
+function openBroadcastModal() {
+  document.getElementById('broadcast-title').value = '';
+  document.getElementById('broadcast-body').value = '';
+  document.getElementById('broadcast-modal').classList.add('open');
+  setTimeout(() => document.getElementById('broadcast-title').focus(), 50);
+}
+function closeBroadcastModal() {
+  document.getElementById('broadcast-modal').classList.remove('open');
+}
+async function submitBroadcast() {
+  const title = document.getElementById('broadcast-title').value.trim();
+  const body = document.getElementById('broadcast-body').value.trim();
+  if (!title || !body) { toast('Fill in both fields'); return; }
+  const res = await api('/api/admin/broadcast', { method: 'POST', body: JSON.stringify({ title, body }) });
+  closeBroadcastModal();
+  toast(`Sent to ${res.sent} subscriber${res.sent !== 1 ? 's' : ''}`);
+}
+
 // ---- Utilities ----
 function copyText(text) {
   navigator.clipboard.writeText(text).then(() => toast('Copied!'));
@@ -484,9 +580,22 @@ function toast(msg) {
   toastTimeout = setTimeout(() => { el.style.display = 'none'; }, 2500);
 }
 
-// Close modal on overlay click
+// Close modals on overlay click
 document.getElementById('generate-modal').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeGenerateModal();
+});
+document.getElementById('rename-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeRenameModal();
+});
+document.getElementById('broadcast-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeBroadcastModal();
+});
+document.getElementById('rename-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitRename();
+  if (e.key === 'Escape') closeRenameModal();
+});
+document.getElementById('broadcast-body').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitBroadcast();
 });
 </script>
 </body>
