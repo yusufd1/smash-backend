@@ -316,14 +316,44 @@ app.post("/api/admin/players/:id/reset-stats", adminAuth, async (req, res) => {
   res.json({ success: true });
 });
 
+app.patch("/api/admin/players/:id/rename", adminAuth, async (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: "Name required" });
+  const player = await Player.findByIdAndUpdate(
+    req.params.id,
+    { name: name.trim(), "avatar.initial": name.trim().charAt(0).toUpperCase() },
+    { new: true }
+  );
+  if (!player) return res.status(404).json({ error: "Player not found" });
+  res.json({ player });
+});
+
 app.get("/api/admin/sessions", adminAuth, async (req, res) => {
   const sessions = await Session.find().sort({ createdAt: -1 });
   res.json(sessions);
 });
 
+app.patch("/api/admin/sessions/:id/complete", adminAuth, async (req, res) => {
+  await Session.findByIdAndUpdate(req.params.id, { status: "completed" });
+  res.json({ success: true });
+});
+
 app.delete("/api/admin/sessions/:id", adminAuth, async (req, res) => {
   await Session.findByIdAndDelete(req.params.id);
   res.json({ success: true });
+});
+
+app.post("/api/admin/broadcast", adminAuth, async (req, res) => {
+  const { title, body } = req.body;
+  if (!title || !body) return res.status(400).json({ error: "Title and body required" });
+  const subscribers = await PushSubscription.find();
+  if (!subscribers.length) return res.json({ sent: 0 });
+  const payload = JSON.stringify({ title, body });
+  const results = await Promise.allSettled(
+    subscribers.map(s => webpush.sendNotification(s.subscription, payload))
+  );
+  const sent = results.filter(r => r.status === "fulfilled").length;
+  res.json({ sent, total: subscribers.length });
 });
 
 const PORT = process.env.PORT || 3001;
